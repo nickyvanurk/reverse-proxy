@@ -8,73 +8,51 @@ public class RequestProcessor implements Runnable {
   private final static Logger logger = Logger.getLogger(
       RequestProcessor.class.getCanonicalName());
 
+  private String serverUrl;
   private Socket connection;
 
   public RequestProcessor(Socket connection) {
+    this.serverUrl = "http://localhost:1337";
     this.connection = connection;
   }
 
   @Override
   public void run() {
     try {
-      OutputStream raw = new BufferedOutputStream(
-                          connection.getOutputStream()
-                         );
-      Writer out = new OutputStreamWriter(raw);
-      Reader in = new InputStreamReader(
-                   new BufferedInputStream(
-                    connection.getInputStream()
-                   ),"US-ASCII"
-                  );
-      StringBuilder requestLine = new StringBuilder();
-      while (true) {
-        int c = in.read();
-        if (c == '\r' || c == '\n') break;
-        requestLine.append((char) c);
+      URL u = new URL(this.serverUrl);
+      HttpURLConnection uc = (HttpURLConnection) u.openConnection();
+      uc.setRequestMethod("GET");
+      int responseCode = uc.getResponseCode();
+      String responseMsg = uc.getResponseMessage();
+      logger.info("HTTP/1.x " + responseCode + " " + responseMsg);
+
+      Writer out = new OutputStreamWriter(connection.getOutputStream());
+
+      if (responseCode == HttpURLConnection.HTTP_OK) {
+        BufferedReader in = new BufferedReader(new InputStreamReader(
+          uc.getInputStream()));
+        String inputLine = "";
+        StringBuffer response = new StringBuffer();
+
+        while ((inputLine = in.readLine()) != null) {
+          response.append(inputLine);
+        }
+
+        in.close();
+
+        int bodyIndex = response.indexOf("<body>");
+        response.replace(bodyIndex, bodyIndex + 6, "<body bgcolor=\"yellow\">");
+
+        writeHeader(out, "HTTP/1.0 200 OK", "text/html", response.toString().length());
+        out.write(response.toString());
+
+      } else {
+        writeHeader(out, "HTTP/1.0 200 OK", "text/html", 23);
+        out.write("GET request didn't work");
+        logger.severe("GET request didn't work");
       }
 
-      String get = requestLine.toString();
-
-      logger.info(connection.getRemoteSocketAddress() + " " + get);
-
-      String[] tokens = get.split("\\s+");
-      String method = tokens[0];
-      String version = "";
-      if (method.equals("GET")) {
-        String fileName = tokens[1];
-        // if (fileName.endsWith("/")) fileName += indexFileName;
-        String contentType =
-            URLConnection.getFileNameMap().getContentTypeFor(fileName);
-        if (tokens.length > 2) {
-          version = tokens[2];
-        }
-
-        String body = new StringBuilder("<HTML>\r\n")
-            .append("<HEAD><TITLE>File Not Found</TITLE>\r\n")
-            .append("</HEAD>\r\n")
-            .append("<BODY>")
-            .append("<H1>HTTP Error 404: File Not Found</H1>\r\n")
-            .append("</BODY></HTML>\r\n").toString();
-        if (version.startsWith("HTTP/")) { // send a MIME header
-          sendHeader(out, "HTTP/1.0 404 File Not Found",
-              "text/html; charset=utf-8", body.length());
-        }
-        out.write(body);
-        out.flush();
-      } else { // method does not equal "GET"
-        String body = new StringBuilder("<HTML>\r\n")
-            .append("<HEAD><TITLE>Not Implemented</TITLE>\r\n")
-            .append("</HEAD>\r\n")
-            .append("<BODY>")
-            .append("<H1>HTTP Error 501: Not Implemented</H1>\r\n")
-            .append("</BODY></HTML>\r\n").toString();
-        if (version.startsWith("HTTP/")) { // send a MIME header
-          sendHeader(out, "HTTP/1.0 501 Not Implemented",
-                    "text/html; charset=utf-8", body.length());
-        }
-        out.write(body);
-        out.flush();
-      }
+      out.flush();
     } catch (IOException ex) {
       logger.log(Level.WARNING,
           "Error talking to " + connection.getRemoteSocketAddress(), ex);
@@ -86,7 +64,7 @@ public class RequestProcessor implements Runnable {
     }
   }
 
-  private void sendHeader(Writer out, String responseCode,
+  private void writeHeader(Writer out, String responseCode,
       String contentType, int length)
       throws IOException {
     out.write(responseCode + "\r\n");
@@ -94,7 +72,7 @@ public class RequestProcessor implements Runnable {
     out.write("Date: " + now + "\r\n");
     out.write("Server: JHTTP 2.0\r\n");
     out.write("Content-length: " + length + "\r\n");
-    out.write("Content-type: " + contentType + "\r\n\r\n");
+    out.write("Content-type: " + contentType + "; charset=UTF-8\r\n\r\n");
     out.flush();
   }
 }
