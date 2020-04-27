@@ -8,12 +8,12 @@ public class RequestProcessor implements Runnable {
   private final static Logger logger = Logger.getLogger(
       RequestProcessor.class.getCanonicalName());
 
-  private String serverUrl;
   private Socket connection;
+  private String serverUrl;
 
-  public RequestProcessor(Socket connection) {
-    this.serverUrl = "http://localhost:1337";
+  public RequestProcessor(Socket connection, String serverUrl) {
     this.connection = connection;
+    this.serverUrl = serverUrl;
   }
 
   @Override

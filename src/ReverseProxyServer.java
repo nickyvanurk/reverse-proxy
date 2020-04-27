@@ -3,14 +3,29 @@ import java.net.*;
 import java.util.concurrent.*;
 import java.util.logging.*;
 
+import java.io.*;
+import java.net.*;
+import java.nio.file.Files;
+import java.util.*;
+import java.util.logging.*;
+
+
 public class ReverseProxyServer {
   private static final Logger logger = Logger.getLogger(
       ReverseProxyServer.class.getCanonicalName());
   private static final int NUM_THREADS = 50;
   private final int port;
+  private ArrayList<String> serverUrls;
+  private int serverUrlIndex;
 
   public ReverseProxyServer(int port) throws IOException {
     this.port = port;
+    this.serverUrls = new ArrayList<String>();
+    this.serverUrls.add("http://localhost:1337");
+    this.serverUrls.add("http://localhost:1338");
+    this.serverUrls.add("http://localhost:1339");
+    this.serverUrls.add("http://localhost:1340");
+    this.serverUrlIndex = 0;
   }
 
   public void start() throws IOException {
@@ -25,7 +40,10 @@ public class ReverseProxyServer {
 
           logger.info("Starting new thread");
 
-          Runnable r = new RequestProcessor(request);
+          Runnable r = new RequestProcessor(request, serverUrls.get(serverUrlIndex));
+
+          serverUrlIndex = (serverUrlIndex + 1) % serverUrls.size();
+
           pool.submit(r);
         } catch (IOException ex) {
           logger.log(Level.WARNING, "Error accepting connection", ex);
