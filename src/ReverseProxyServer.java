@@ -23,14 +23,6 @@ public class ReverseProxyServer {
         try {
           Socket request = server.accept();
 
-          // TODO: create requestProcessor class for reverse proxy server [done]
-
-          // start new thread with request [done]
-            // send request to server
-            // wait for response
-            // send response back
-            // close connection
-
           logger.info("Starting new thread");
 
           Runnable r = new RequestProcessor(request);

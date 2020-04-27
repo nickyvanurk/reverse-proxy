@@ -40,9 +40,6 @@ public class RequestProcessor implements Runnable {
 
         in.close();
 
-        int bodyIndex = response.indexOf("<body>");
-        response.replace(bodyIndex, bodyIndex + 6, "<body bgcolor=\"yellow\">");
-
         writeHeader(out, "HTTP/1.0 200 OK", "text/html", response.toString().length());
         out.write(response.toString());
 
