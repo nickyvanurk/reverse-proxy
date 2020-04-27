@@ -19,32 +19,52 @@ public class RequestProcessor implements Runnable {
   @Override
   public void run() {
     try {
-      URL u = new URL(this.serverUrl);
+      Reader input = new InputStreamReader(new BufferedInputStream(
+          connection.getInputStream()),"US-ASCII");
+      StringBuilder requestLine = new StringBuilder();
+
+      while (true) {
+        int c = input.read();
+        if (c == '\r' || c == '\n') break;
+        requestLine.append((char) c);
+      }
+
+      String get = requestLine.toString();
+      String[] tokens = get.split("\\s+");
+      String path = tokens[1];
+
+      URL u = new URL(this.serverUrl + path);
       HttpURLConnection uc = (HttpURLConnection) u.openConnection();
       uc.setRequestMethod("GET");
       int responseCode = uc.getResponseCode();
       String responseMsg = uc.getResponseMessage();
       logger.info("HTTP/1.x " + responseCode + " " + responseMsg);
 
-      Writer out = new OutputStreamWriter(connection.getOutputStream());
+      OutputStream raw = new BufferedOutputStream(
+                          connection.getOutputStream()
+                         );
+      Writer out = new OutputStreamWriter(raw);
 
       if (responseCode == HttpURLConnection.HTTP_OK) {
-        BufferedReader in = new BufferedReader(new InputStreamReader(
-          uc.getInputStream()));
-        String inputLine = "";
-        StringBuffer response = new StringBuffer();
+        InputStream in = new BufferedInputStream(uc.getInputStream());
+        ByteArrayOutputStream outt = new ByteArrayOutputStream();
+        byte[] buf = new byte[1024];
+        int n = 0;
 
-        while ((inputLine = in.readLine()) != null) {
-          response.append(inputLine);
+        while (-1!=(n=in.read(buf))) {
+          outt.write(buf, 0, n);
         }
 
+        outt.close();
         in.close();
+        byte[] response = outt.toByteArray();
 
-        writeHeader(out, "HTTP/1.0 200 OK", "text/html", response.toString().length());
-        out.write(response.toString());
+        sendHeader(out, "HTTP/1.0 200 OK", "text/html", response.length);
+        raw.write(response);
+        raw.flush();
 
       } else {
-        writeHeader(out, "HTTP/1.0 200 OK", "text/html", 23);
+        sendHeader(out, "HTTP/1.0 200 OK", "text/html", 23);
         out.write("GET request didn't work");
         logger.severe("GET request didn't work");
       }
@@ -61,7 +81,7 @@ public class RequestProcessor implements Runnable {
     }
   }
 
-  private void writeHeader(Writer out, String responseCode,
+  private void sendHeader(Writer out, String responseCode,
       String contentType, int length)
       throws IOException {
     out.write(responseCode + "\r\n");

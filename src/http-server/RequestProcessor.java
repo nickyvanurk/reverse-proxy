@@ -79,31 +79,6 @@ public class RequestProcessor implements Runnable {
             sendHeader(out, "HTTP/1.0 200 OK", contentType, theData.length);
           }
 
-          // String findString = "<body>";
-
-          // for (int i = 0; i < theData.length; ++i) {
-          //   if (theData[i] == (byte)findString.charAt(0)) {
-          //     // not enough space to be the findString so don't check
-          //     if (theData.length - 1 - i < (findString.length() - 1)) {
-          //       logger.severe("Can't be body tag");
-          //       break;
-          //     }
-
-          //     if (theData[i+1] == findString.charAt(1) &&
-          //         theData[i+2] == findString.charAt(2) &&
-          //         theData[i+3] == findString.charAt(3) &&
-          //         theData[i+4] == findString.charAt(4) &&
-          //         theData[i+5] == findString.charAt(5)) {
-          //       ByteBuffer buffer = ByteBuffer.wrap(theData);
-          //       byte[] newArray = "<body bgcolor=\"yellow\">".getBytes();
-          //       buffer.position(i);
-          //       buffer.put(newArray);
-
-          //       logger.info("<body> found");
-          //     }
-          //   }
-          // }
-
           if (theFile.getCanonicalPath().endsWith("html")) {
             String data = new String(theData, "UTF-8");
             data = data.replace("<body>", "<body bgcolor=\"yellow\">");
