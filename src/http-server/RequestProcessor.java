@@ -104,13 +104,17 @@ public class RequestProcessor implements Runnable {
           //   }
           // }
 
-          String data = new String(theData, "UTF-8");
-          data = data.replace("<body>", "<body bgcolor=\"yellow\">");
+          if (theFile.getCanonicalPath().endsWith("html")) {
+            String data = new String(theData, "UTF-8");
+            data = data.replace("<body>", "<body bgcolor=\"yellow\">");
+            raw.write(data.getBytes("UTF-8"));
+          } else {
+            raw.write(theData);
+          }
 
           // send the file; it may be an image or other binary data
           // so use the underlying output stream
           // instead of the writer
-          raw.write(data.getBytes("UTF-8"));
           raw.flush();
         } else { // can't find the file
           String body = new StringBuilder("<HTML>\r\n")
