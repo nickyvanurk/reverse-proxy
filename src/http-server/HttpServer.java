@@ -12,8 +12,9 @@ public class HttpServer {
 
   private final File rootDirectory;
   private final int port;
+  private final String bgColor;
 
-  public HttpServer(File rootDirectory, int port) throws IOException {
+  public HttpServer(File rootDirectory, int port, String bgColor) throws IOException {
 
     if (!rootDirectory.isDirectory()) {
       throw new IOException(rootDirectory
@@ -21,6 +22,7 @@ public class HttpServer {
     }
     this.rootDirectory = rootDirectory;
     this.port = port;
+    this.bgColor = bgColor;
   }
 
   public void start() throws IOException {
@@ -33,7 +35,7 @@ public class HttpServer {
         try {
           Socket request = server.accept();
           Runnable r = new RequestProcessor(
-              rootDirectory, INDEX_FILE, request);
+              rootDirectory, INDEX_FILE, request, bgColor);
           pool.submit(r);
         } catch (IOException ex) {
           logger.log(Level.WARNING, "Error accepting connection", ex);
@@ -62,8 +64,16 @@ public class HttpServer {
       port = 80;
     }
 
+    String bgColor;
     try {
-      HttpServer webserver = new HttpServer(docroot, port);
+      bgColor = args[2];
+    }
+    catch (ArrayIndexOutOfBoundsException ex) {
+      bgColor = "yellow";
+    }
+
+    try {
+      HttpServer webserver = new HttpServer(docroot, port, bgColor);
       webserver.start();
     } catch (IOException ex) {
       logger.log(Level.SEVERE, "Server could not start", ex);

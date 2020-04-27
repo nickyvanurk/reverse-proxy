@@ -13,9 +13,10 @@ public class RequestProcessor implements Runnable {
   private File rootDirectory;
   private String indexFileName = "index.html";
   private Socket connection;
+  private final String bgColor;
 
   public RequestProcessor(File rootDirectory,
-      String indexFileName, Socket connection) {
+      String indexFileName, Socket connection, String bgColor) {
 
     if (rootDirectory.isFile()) {
       throw new IllegalArgumentException(
@@ -29,12 +30,14 @@ public class RequestProcessor implements Runnable {
 
     if (indexFileName != null) this.indexFileName = indexFileName;
     this.connection = connection;
+    this.bgColor = bgColor;
   }
 
   @Override
   public void run() {
     // for security checks
     String root = rootDirectory.getPath();
+
     try {
       OutputStream raw = new BufferedOutputStream(
                           connection.getOutputStream()
@@ -46,11 +49,13 @@ public class RequestProcessor implements Runnable {
                    ),"US-ASCII"
                   );
       StringBuilder requestLine = new StringBuilder();
+
       while (true) {
         int c = in.read();
         if (c == '\r' || c == '\n') break;
         requestLine.append((char) c);
       }
+
 
       String get = requestLine.toString();
 
@@ -81,7 +86,7 @@ public class RequestProcessor implements Runnable {
 
           if (theFile.getCanonicalPath().endsWith("html")) {
             String data = new String(theData, "UTF-8");
-            data = data.replace("<body>", "<body bgcolor=\"yellow\">");
+            data = data.replace("<body>", "<body bgcolor=\"" + this.bgColor + "\">");
             raw.write(data.getBytes("UTF-8"));
           } else {
             raw.write(theData);
