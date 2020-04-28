@@ -2,30 +2,26 @@ import java.io.*;
 import java.net.*;
 import java.util.concurrent.*;
 import java.util.logging.*;
-
-import java.io.*;
-import java.net.*;
-import java.nio.file.Files;
-import java.util.*;
-import java.util.logging.*;
-
+import java.util.Properties;
 
 public class ReverseProxyServer {
   private static final Logger logger = Logger.getLogger(
       ReverseProxyServer.class.getCanonicalName());
   private static final int NUM_THREADS = 50;
   private final int port;
-  private ArrayList<String> serverUrls;
+  private int serverCount;
   private int serverUrlIndex;
+  private Properties configFile;
 
   public ReverseProxyServer(int port) throws IOException {
     this.port = port;
-    this.serverUrls = new ArrayList<String>();
-    this.serverUrls.add("http://localhost:1337");
-    this.serverUrls.add("http://localhost:1338");
-    this.serverUrls.add("http://localhost:1339");
-    this.serverUrls.add("http://localhost:1340");
+    this.configFile = ReverseProxyServer.readPropertiesFile("../config/config.properties");
+    this.serverCount = Integer.parseInt(this.configFile.getProperty("server.count"));
     this.serverUrlIndex = 0;
+
+    for (int i = 0; i < 5; i++) {
+      logger.info(this.getServerUrl());
+    }
   }
 
   public void start() throws IOException {
@@ -39,17 +35,36 @@ public class ReverseProxyServer {
           Socket request = server.accept();
 
           logger.info("Starting new thread");
-
-          Runnable r = new RequestProcessor(request, serverUrls.get(serverUrlIndex));
-
-          serverUrlIndex = (serverUrlIndex + 1) % serverUrls.size();
-
-          pool.submit(r);
+          pool.submit(new RequestProcessor(request, this.getServerUrl()));
         } catch (IOException ex) {
           logger.log(Level.WARNING, "Error accepting connection", ex);
         }
       }
     }
+  }
+
+  private String getServerUrl() {
+    String url = this.configFile.getProperty("server.url" + (this.serverUrlIndex + 1));
+
+    if (url != null) {
+      serverUrlIndex = (serverUrlIndex + 1) % serverCount;
+    } else {
+      logger.warning("Read url is null");
+    }
+
+    return url;
+  }
+
+  private static Properties readPropertiesFile(String path) {
+    Properties configFile = new Properties();
+
+    try {
+      configFile.load(new FileInputStream(path));
+    } catch (Exception ex) {
+      logger.log(Level.WARNING, "Error reading config", ex);
+    }
+
+    return configFile;
   }
 
   public static void main(String[] args) {
