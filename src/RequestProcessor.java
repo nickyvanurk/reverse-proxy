@@ -4,15 +4,18 @@ import java.nio.file.Files;
 import java.util.*;
 import java.util.logging.*;
 
+
 public class RequestProcessor implements Runnable {
   private final static Logger logger = Logger.getLogger(
       RequestProcessor.class.getCanonicalName());
 
   private Socket connection;
   private String serverUrl;
+  private File cacheDir;
 
-  public RequestProcessor(Socket connection, String serverUrl) {
+  public RequestProcessor(Socket connection, File cacheDir, String serverUrl) {
     this.connection = connection;
+    this.cacheDir = cacheDir;
     this.serverUrl = serverUrl;
   }
 
@@ -31,9 +34,10 @@ public class RequestProcessor implements Runnable {
 
       String get = requestLine.toString();
       String[] tokens = get.split("\\s+");
-      String path = tokens[1];
+      String fileName = tokens[1];
+      if (fileName.endsWith("/")) fileName += "index.html";
 
-      URL u = new URL(this.serverUrl + path);
+      URL u = new URL(this.serverUrl + fileName);
       HttpURLConnection uc = (HttpURLConnection) u.openConnection();
       uc.setRequestMethod("GET");
       int responseCode = uc.getResponseCode();
@@ -59,6 +63,8 @@ public class RequestProcessor implements Runnable {
         in.close();
         byte[] response = outt.toByteArray();
 
+        saveInCache(fileName.substring(1, fileName.length()), response);
+
         sendHeader(out, "HTTP/1.0 200 OK", "text/html", response.length);
         raw.write(response);
         raw.flush();
@@ -78,6 +84,31 @@ public class RequestProcessor implements Runnable {
         connection.close();
       }
       catch (IOException ex) {}
+    }
+  }
+
+  private void saveInCache(String filename, byte[] content) {
+    File theFile = new File(cacheDir, filename);
+    FileOutputStream fos = null;
+
+    try {
+      fos = new FileOutputStream(theFile);
+      fos.write(content);
+
+    } catch (FileNotFoundException ex) {
+      logger.log(Level.WARNING, "Cache file cannot be saved", ex);
+    } catch (SecurityException ex) {
+      logger.log(Level.WARNING, "Cache file cannot be saved", ex);
+    } catch (IOException ex) {
+      logger.log(Level.WARNING, "Cache file cannot be saved", ex);
+    } finally {
+      try {
+        if (fos != null) {
+          fos.close();
+        }
+      } catch (IOException ex) {
+        logger.log(Level.WARNING, "Cache file output stream cannot be closed", ex);
+      }
     }
   }
 
