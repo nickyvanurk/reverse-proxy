@@ -4,7 +4,6 @@ import java.nio.file.Files;
 import java.util.*;
 import java.util.logging.*;
 
-
 public class RequestProcessor implements Runnable {
   private final static Logger logger = Logger.getLogger(
       RequestProcessor.class.getCanonicalName());
@@ -15,8 +14,19 @@ public class RequestProcessor implements Runnable {
 
   public RequestProcessor(Socket connection, File cacheDir, String serverUrl) {
     this.connection = connection;
-    this.cacheDir = cacheDir;
     this.serverUrl = serverUrl;
+
+    if (cacheDir.isFile()) {
+      throw new IllegalArgumentException("cacheDir must be a directory, not a file");
+    }
+
+    try {
+      cacheDir = cacheDir.getCanonicalFile();
+    } catch (IOException ex) {
+      logger.log(Level.WARNING, "Cannot get cache directory", ex);
+    }
+
+    this.cacheDir = cacheDir;
   }
 
   @Override
@@ -34,20 +44,31 @@ public class RequestProcessor implements Runnable {
 
       String get = requestLine.toString();
       String[] tokens = get.split("\\s+");
-      String fileName = tokens[1];
-      if (fileName.endsWith("/")) fileName += "index.html";
+      String path = tokens[1];
+      String filename = path.substring(1, path.length());
 
-      URL u = new URL(this.serverUrl + fileName);
+      if (path.endsWith("/")) {
+        filename += "index.html";
+      }
+
+      OutputStream raw = new BufferedOutputStream(connection.getOutputStream());
+      Writer out = new OutputStreamWriter(raw);
+
+      byte[] fileFromCache = fetchFromCache(filename);
+
+      if (fileFromCache != null) {
+        sendHeader(out, "HTTP/1.0 200 OK", "text/html", fileFromCache.length);
+        raw.write(fileFromCache);
+        raw.flush();
+        return;
+      }
+
+      URL u = new URL(this.serverUrl + path);
       HttpURLConnection uc = (HttpURLConnection) u.openConnection();
       uc.setRequestMethod("GET");
       int responseCode = uc.getResponseCode();
       String responseMsg = uc.getResponseMessage();
       logger.info("HTTP/1.x " + responseCode + " " + responseMsg);
-
-      OutputStream raw = new BufferedOutputStream(
-                          connection.getOutputStream()
-                         );
-      Writer out = new OutputStreamWriter(raw);
 
       if (responseCode == HttpURLConnection.HTTP_OK) {
         InputStream in = new BufferedInputStream(uc.getInputStream());
@@ -63,7 +84,7 @@ public class RequestProcessor implements Runnable {
         in.close();
         byte[] response = outt.toByteArray();
 
-        saveInCache(fileName.substring(1, fileName.length()), response);
+        saveInCache(filename, response);
 
         sendHeader(out, "HTTP/1.0 200 OK", "text/html", response.length);
         raw.write(response);
@@ -110,6 +131,22 @@ public class RequestProcessor implements Runnable {
         logger.log(Level.WARNING, "Cache file output stream cannot be closed", ex);
       }
     }
+  }
+
+  private byte[] fetchFromCache(String filename) {
+    File file = new File(this.cacheDir, filename);
+    String root = this.cacheDir.getPath();
+    byte[] data = null;
+
+    try {
+      if (file.canRead() && file.getCanonicalPath().startsWith(root)) {
+        data = Files.readAllBytes(file.toPath());
+      }
+    } catch (IOException ex) {
+      logger.log(Level.WARNING, "Cannot read cache file", ex);
+    }
+
+    return data;
   }
 
   private void sendHeader(Writer out, String responseCode,
