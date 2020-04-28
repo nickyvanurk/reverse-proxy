@@ -13,7 +13,7 @@ public class ReverseProxyServer {
   private final int serverCount;
   private int serverUrlIndex;
 
-  public ReverseProxyServer(int port) throws IOException {
+  public ReverseProxyServer() throws IOException {
     this.configFile = ReverseProxyServer.readPropertiesFile("../config/config.properties");
     this.port = getPort();
     this.serverCount = Integer.parseInt(this.configFile.getProperty("server.count"));
@@ -80,19 +80,8 @@ public class ReverseProxyServer {
   }
 
   public static void main(String[] args) {
-    int port;
     try {
-      port = Integer.parseInt(args[0]);
-
-      if (port < 0 || port > 65535) {
-        port = 8080;
-      }
-    } catch (RuntimeException ex) {
-      port = 8080;
-    }
-
-    try {
-      ReverseProxyServer reverseProxyServer = new ReverseProxyServer(port);
+      ReverseProxyServer reverseProxyServer = new ReverseProxyServer();
       reverseProxyServer.start();
     } catch (IOException ex) {
       logger.log(Level.SEVERE, "Reverse proxy server could not start", ex);
