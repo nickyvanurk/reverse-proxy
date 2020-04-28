@@ -8,20 +8,16 @@ public class ReverseProxyServer {
   private static final Logger logger = Logger.getLogger(
       ReverseProxyServer.class.getCanonicalName());
   private static final int NUM_THREADS = 50;
-  private final int port;
-  private int serverCount;
-  private int serverUrlIndex;
   private Properties configFile;
+  private final int port;
+  private final int serverCount;
+  private int serverUrlIndex;
 
   public ReverseProxyServer(int port) throws IOException {
-    this.port = port;
     this.configFile = ReverseProxyServer.readPropertiesFile("../config/config.properties");
+    this.port = getPort();
     this.serverCount = Integer.parseInt(this.configFile.getProperty("server.count"));
     this.serverUrlIndex = 0;
-
-    for (int i = 0; i < 5; i++) {
-      logger.info(this.getServerUrl());
-    }
   }
 
   public void start() throws IOException {
@@ -53,6 +49,22 @@ public class ReverseProxyServer {
     }
 
     return url;
+  }
+
+  private int getPort() {
+    int port;
+
+    try {
+      port = Integer.parseInt(this.configFile.getProperty("port"));
+
+      if (port < 0 || port > 65535) {
+        port = 8080;
+      }
+    } catch (RuntimeException ex) {
+      port = 8080;
+    }
+
+    return port;
   }
 
   private static Properties readPropertiesFile(String path) {
