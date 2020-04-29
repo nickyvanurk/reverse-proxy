@@ -68,81 +68,87 @@ public class RequestProcessor implements Runnable {
     }
   }
 
-  private static String[] getHeaders(Socket connection) {
-    try {
-      Reader input = new InputStreamReader(new BufferedInputStream(
-          connection.getInputStream()),"UTF-8");
-      StringBuilder requestLine = new StringBuilder();
-
-      while (true) {
-        int c = input.read();
-        if (c == '\r' || c == '\n') break;
-        requestLine.append((char) c);
-      }
-
-      return requestLine.toString().split("\\s+");
-    } catch (IOException ex) {
-      logger.log(Level.SEVERE, "Cannot read connection headers");
-      throw new NullPointerException("requestLine cannot be null");
-    }
-  }
-
   private byte[] fetchFile(String filePath) {
-    try {
-      if (cacheEnabled) {
-        byte[] fileFromCache = fetchFromCache(filePath);
+    if (cacheEnabled) {
+      byte[] fileFromCache = fetchFromCache(filePath);
 
-        if (fileFromCache != null) {
-          logger.info("Fetching successfully from cache");
-          return fileFromCache;
-        }
+      if (fileFromCache != null) {
+        logger.info("Fetching successfully from cache");
+        return fileFromCache;
       }
 
       logger.info("Not in cache, fetching from server");
+    }
 
-      URL u = new URL(this.serverUrl + filePath);
-      HttpURLConnection uc = (HttpURLConnection) u.openConnection();
-      uc.setRequestMethod("GET");
-      int responseCode = uc.getResponseCode();
-      String responseMsg = uc.getResponseMessage();
+    byte[] fileFromServer = fetchFromServer(filePath);
+
+    if (fileFromServer != null) {
+      if (cacheEnabled) {
+        saveInCache(filePath, fileFromServer);
+      }
+
+      return fileFromServer;
+    }
+
+    logger.log(Level.WARNING, "Can't fetch file from server");
+    return null;
+  }
+
+  private byte[] fetchFromServer(String filePath) {
+    try {
+      URL url = new URL(this.serverUrl + filePath);
+      HttpURLConnection serverConnection = (HttpURLConnection) url.openConnection();
+      int responseCode = serverConnection.getResponseCode();
+      String responseMsg = serverConnection.getResponseMessage();
+
       logger.info("HTTP/1.x " + responseCode + " " + responseMsg);
 
       if (responseCode == HttpURLConnection.HTTP_OK) {
-        InputStream in = new BufferedInputStream(uc.getInputStream());
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] buf = new byte[1024];
-        int n = 0;
+        InputStream inputStream = new BufferedInputStream(serverConnection.getInputStream());
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
 
-        while (-1!=(n=in.read(buf))) {
-          out.write(buf, 0, n);
+        int byteRead = 0;
+
+        while ((byteRead = inputStream.read(buffer)) != -1) {
+          outputStream.write(buffer, 0, byteRead);
         }
 
-        out.close();
-        in.close();
+        inputStream.close();
+        outputStream.close();
 
-        byte[] response = out.toByteArray();
-
-        if (cacheEnabled) {
-          saveInCache(filePath, response);
-        }
-
-        return response;
-      } else {
-        logger.severe("GET request didn't work");
+        return outputStream.toByteArray();
       }
     } catch (IOException ex) {
-      logger.log(Level.WARNING, "Can't fetch file from server", ex);
+      logger.log(Level.WARNING, filePath + " cannot be fetched from server", ex);
     }
 
     return null;
   }
 
+  private byte[] fetchFromCache(String filename) {
+    File file = new File(this.cacheDir, filename);
+    String root = this.cacheDir.getPath();
+    byte[] data = null;
+
+    try {
+      if (file.canRead() && file.getCanonicalPath().startsWith(root)) {
+        data = Files.readAllBytes(file.toPath());
+      }
+    } catch (IOException ex) {
+      logger.log(Level.WARNING, "Cannot read cache file", ex);
+    }
+
+    return data;
+  }
+
   private void saveInCache(String filename, byte[] content) {
-    File theFile = new File(cacheDir, filename);
+    File file = new File(cacheDir, filename);
     FileOutputStream fos = null;
 
     try {
-      fos = new FileOutputStream(theFile);
+      file.getParentFile().mkdirs();
+      fos = new FileOutputStream(file);
       fos.write(content);
 
     } catch (FileNotFoundException ex) {
@@ -162,23 +168,26 @@ public class RequestProcessor implements Runnable {
     }
   }
 
-  private byte[] fetchFromCache(String filename) {
-    File file = new File(this.cacheDir, filename);
-    String root = this.cacheDir.getPath();
-    byte[] data = null;
-
+  private static String[] getHeaders(Socket connection) {
     try {
-      if (file.canRead() && file.getCanonicalPath().startsWith(root)) {
-        data = Files.readAllBytes(file.toPath());
-      }
-    } catch (IOException ex) {
-      logger.log(Level.WARNING, "Cannot read cache file", ex);
-    }
+      Reader input = new InputStreamReader(new BufferedInputStream(
+          connection.getInputStream()),"UTF-8");
+      StringBuilder requestLine = new StringBuilder();
 
-    return data;
+      while (true) {
+        int c = input.read();
+        if (c == '\r' || c == '\n') break;
+        requestLine.append((char) c);
+      }
+
+      return requestLine.toString().split("\\s+");
+    } catch (IOException ex) {
+      logger.log(Level.SEVERE, "Cannot read connection headers");
+      throw new NullPointerException("requestLine cannot be null");
+    }
   }
 
-  private void sendHeader(Writer out, String responseCode,
+  private static void sendHeader(Writer out, String responseCode,
       String contentType, int length)
       throws IOException {
     out.write(responseCode + "\r\n");
