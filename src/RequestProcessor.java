@@ -7,7 +7,6 @@ import java.util.logging.*;
 public class RequestProcessor implements Runnable {
   private final static Logger logger = Logger.getLogger(
       RequestProcessor.class.getCanonicalName());
-
   private Socket connection;
   private String serverUrl;
   private File cacheDir;
@@ -32,8 +31,45 @@ public class RequestProcessor implements Runnable {
   @Override
   public void run() {
     try {
+      String[] headers = getHeaders(connection);
+      String filePath = headers[1];
+
+      if (filePath.endsWith("/")) {
+        filePath += "index.html";
+      }
+
+      byte[] content = fetchFile(filePath);
+
+      OutputStream raw = new BufferedOutputStream(connection.getOutputStream());
+      Writer out = new OutputStreamWriter(raw);
+
+      if (content != null) {
+        String contentType = URLConnection.getFileNameMap().getContentTypeFor(filePath);
+        sendHeader(out, "HTTP/1.0 200 OK", contentType, content.length);
+      } else {
+        content = "File not found".getBytes("UTF-8");
+        sendHeader(out, "HTTP/1.0 404 File Not Found", "text/html; charset=utf-8", content.length);
+      }
+
+      raw.write(content);
+      raw.flush();
+      connection.close();
+    } catch (IOException ex) {
+      logger.log(Level.WARNING, "Error talking to " + connection.getRemoteSocketAddress(), ex);
+    } finally {
+      try {
+        connection.close();
+      }
+      catch (IOException ex) {
+        logger.log(Level.WARNING, "Can't close connection", ex);
+      }
+    }
+  }
+
+  private static String[] getHeaders(Socket connection) {
+    try {
       Reader input = new InputStreamReader(new BufferedInputStream(
-          connection.getInputStream()),"US-ASCII");
+          connection.getInputStream()),"UTF-8");
       StringBuilder requestLine = new StringBuilder();
 
       while (true) {
@@ -42,28 +78,25 @@ public class RequestProcessor implements Runnable {
         requestLine.append((char) c);
       }
 
-      String get = requestLine.toString();
-      String[] tokens = get.split("\\s+");
-      String path = tokens[1];
-      String filename = path.substring(1, path.length());
+      return requestLine.toString().split("\\s+");
+    } catch (IOException ex) {
+      logger.log(Level.SEVERE, "Cannot read connection headers");
+      throw new NullPointerException("requestLine cannot be null");
+    }
+  }
 
-      if (path.endsWith("/")) {
-        filename += "index.html";
-      }
-
-      OutputStream raw = new BufferedOutputStream(connection.getOutputStream());
-      Writer out = new OutputStreamWriter(raw);
-
-      byte[] fileFromCache = fetchFromCache(filename);
+  private byte[] fetchFile(String filePath) {
+    try {
+      byte[] fileFromCache = fetchFromCache(filePath);
 
       if (fileFromCache != null) {
-        sendHeader(out, "HTTP/1.0 200 OK", "text/html", fileFromCache.length);
-        raw.write(fileFromCache);
-        raw.flush();
-        return;
+        logger.info("Fetching successfully from cache");
+        return fileFromCache;
       }
 
-      URL u = new URL(this.serverUrl + path);
+      logger.info("Not in cache, fetching from server");
+
+      URL u = new URL(this.serverUrl + filePath);
       HttpURLConnection uc = (HttpURLConnection) u.openConnection();
       uc.setRequestMethod("GET");
       int responseCode = uc.getResponseCode();
@@ -72,40 +105,30 @@ public class RequestProcessor implements Runnable {
 
       if (responseCode == HttpURLConnection.HTTP_OK) {
         InputStream in = new BufferedInputStream(uc.getInputStream());
-        ByteArrayOutputStream outt = new ByteArrayOutputStream();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buf = new byte[1024];
         int n = 0;
 
         while (-1!=(n=in.read(buf))) {
-          outt.write(buf, 0, n);
+          out.write(buf, 0, n);
         }
 
-        outt.close();
+        out.close();
         in.close();
-        byte[] response = outt.toByteArray();
 
-        saveInCache(filename, response);
+        byte[] response = out.toByteArray();
 
-        sendHeader(out, "HTTP/1.0 200 OK", "text/html", response.length);
-        raw.write(response);
-        raw.flush();
+        saveInCache(filePath, response);
 
+        return response;
       } else {
-        sendHeader(out, "HTTP/1.0 200 OK", "text/html", 23);
-        out.write("GET request didn't work");
         logger.severe("GET request didn't work");
       }
-
-      out.flush();
     } catch (IOException ex) {
-      logger.log(Level.WARNING,
-          "Error talking to " + connection.getRemoteSocketAddress(), ex);
-    } finally {
-      try {
-        connection.close();
-      }
-      catch (IOException ex) {}
+      logger.log(Level.WARNING, "Can't fetch file from server", ex);
     }
+
+    return null;
   }
 
   private void saveInCache(String filename, byte[] content) {
