@@ -9,11 +9,13 @@ public class RequestProcessor implements Runnable {
       RequestProcessor.class.getCanonicalName());
   private Socket connection;
   private String serverUrl;
+  private boolean cacheEnabled;
   private File cacheDir;
 
-  public RequestProcessor(Socket connection, File cacheDir, String serverUrl) {
+  public RequestProcessor(Socket connection, File cacheDir, Boolean cacheEnabled, String serverUrl) {
     this.connection = connection;
     this.serverUrl = serverUrl;
+    this.cacheEnabled = cacheEnabled;
 
     if (cacheDir.isFile()) {
       throw new IllegalArgumentException("cacheDir must be a directory, not a file");
@@ -87,11 +89,13 @@ public class RequestProcessor implements Runnable {
 
   private byte[] fetchFile(String filePath) {
     try {
-      byte[] fileFromCache = fetchFromCache(filePath);
+      if (cacheEnabled) {
+        byte[] fileFromCache = fetchFromCache(filePath);
 
-      if (fileFromCache != null) {
-        logger.info("Fetching successfully from cache");
-        return fileFromCache;
+        if (fileFromCache != null) {
+          logger.info("Fetching successfully from cache");
+          return fileFromCache;
+        }
       }
 
       logger.info("Not in cache, fetching from server");
@@ -118,7 +122,9 @@ public class RequestProcessor implements Runnable {
 
         byte[] response = out.toByteArray();
 
-        saveInCache(filePath, response);
+        if (cacheEnabled) {
+          saveInCache(filePath, response);
+        }
 
         return response;
       } else {

@@ -12,6 +12,7 @@ public class ReverseProxyServer {
   private final int port;
   private final int serverCount;
   private int serverUrlIndex;
+  private boolean cacheEnabled;
   private File cacheDir;
 
   public ReverseProxyServer() throws IOException {
@@ -19,6 +20,7 @@ public class ReverseProxyServer {
     this.port = getPort();
     this.serverCount = Integer.parseInt(this.configFile.getProperty("server.count"));
     this.serverUrlIndex = 0;
+    this.cacheEnabled = Boolean.parseBoolean(this.configFile.getProperty("cache.enabled"));
     this.cacheDir = this.getCacheDir();
   }
 
@@ -33,7 +35,7 @@ public class ReverseProxyServer {
           Socket request = server.accept();
 
           logger.info("Starting new thread");
-          pool.submit(new RequestProcessor(request, cacheDir, this.getServerUrl()));
+          pool.submit(new RequestProcessor(request, cacheDir, cacheEnabled, this.getServerUrl()));
         } catch (IOException ex) {
           logger.log(Level.WARNING, "Error accepting connection", ex);
         }
